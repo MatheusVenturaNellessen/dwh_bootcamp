@@ -1,4 +1,4 @@
-# Data Warehouse — Bootcamp DWH
+# Data Warehouse Bootcamp
 
 Data Warehouse em **PostgreSQL** que integra dados de dois sistemas de origem (**CRM** e **ERP**) usando a **Arquitetura Medallion** (Bronze → Silver → Gold), com modelo final em **Star Schema** para consultas analíticas de vendas.
 
@@ -17,7 +17,7 @@ Data Warehouse em **PostgreSQL** que integra dados de dois sistemas de origem (*
 
 ## 1. Arquitetura
 
-![Arquitetura do DWH](docs/dwh_architecture.drawio.png)
+![Arquitetura do DWH](docs/dwh_architecture.png)
 
 | Camada | Conteúdo | Objetos | Carga | Transformação |
 |---|---|---|---|---|
@@ -30,9 +30,7 @@ A **disponibilização** é feita por consultas SQL diretamente sobre as views d
 
 ## 2. Fluxo de dados
 
-![Fluxo de dados](docs/data_flow.drawio.png)
-
-> Na imagem, os três blocos estão rotulados como "Camada Bronze"; o correto é **Bronze → Silver → Gold**, da esquerda para a direita.
+![Fluxo de dados](docs/data_flow.png)
 
 | Origem | Bronze / Silver | Gold |
 |---|---|---|
@@ -45,7 +43,7 @@ A **disponibilização** é feita por consultas SQL diretamente sobre as views d
 
 ## 3. Modelo de integração (origens)
 
-![Modelo de integração](docs/integration_model.drawio.png)
+![Modelo de integração](docs/integration_model.png)
 
 Como as tabelas dos dois sistemas se relacionam:
 
@@ -56,7 +54,7 @@ Como as tabelas dos dois sistemas se relacionam:
 
 ## 4. Modelo de dados final (Gold)
 
-![Modelo de dados Gold](docs/data_model.drawio.png)
+![Modelo de dados Gold](docs/data_model.png)
 
 - **`gold.dim_customers`** — 1 registro por cliente (CRM + dados demográficos e país do ERP).
 - **`gold.dim_products`** — 1 registro por produto ativo (CRM + categorias do ERP).
@@ -70,41 +68,51 @@ O dicionário de dados completo (colunas, tipos, PK/FK) está em [`docs/data_cat
 ```
 dwh_bootcamp/
 ├── datasets/
-│   ├── source_crm/        # cust_info.csv, prd_info.csv, sales_details.csv
-│   └── source_erp/        # CUST_AZ12.csv, LOC_A101.csv, PX_CAT_G1V2.csv
-├── docs/                  # Imagens da arquitetura, catálogo e convenções
-│   └── drawio/            # Arquivos-fonte (.drawio) dos diagramas
+│   ├── source_crm/
+|   |   └── *.csv                # Dados provenientes do sistema CRM
+│   └── source_erp/
+|       └── *.csv                # Dados provenientes do sistema ERP
+├── docs/
+│   ├── drawio/                  # Arquivos-fonte (.drawio) dos diagramas
+|   ├── *.png                    # Imagens da arquitetura
+|   ├── data_catalog,md          # Dicionário de dados
+|   └── naming_conventions.md    # Convenções de nome
 ├── scripts/
 │   ├── init_database.sql
-│   ├── bronze/            # ddl_bronze.sql, sp_load_bronze.sql
-│   ├── silver/            # ddl_silver.sql, sp_load_silver.sql
-│   └── gold/              # ddl_gold.sql
-└── tests/                 # silver_quality_checks.sql, gold_quality_checks.sql
+│   ├── bronze/
+|   |   ├── ddl_bronze.sql
+|   |   └── sp_load_bronze.sql
+│   ├── silver/
+|   |   ├── ddl_silver.sql, 
+|   |   └── sp_load_silver.sql
+│   └── gold/
+|       └── ddl_gold.sql
+└── tests/
+    ├── silver_quality_checks.sql
+    └── gold_quality_checks.sql
 ```
 
 ## 6. Scripts SQL
 
-### `scripts/init_database.sql`
+### scripts/`init_database.sql`
 Prepara a base do DWH.
-1. Remove o banco `data_warehouse`, se existir.
+1. **Remove o banco `data_warehouse`**, se existir.
 2. Cria o banco `data_warehouse`.
 3. Cria os schemas `bronze`, `silver` e `gold`.
 
-> ⚠️ Apaga o banco existente por completo.
+### scripts/bronze/`ddl_bronze.sql`
+Cria as 6 tabelas da Bronze (3 do CRM, 3 do ERP) com a mesma estrutura dos CSVs.
 
-### `scripts/bronze/ddl_bronze.sql`
-Cria as 6 tabelas brutas (3 do CRM, 3 do ERP) com a mesma estrutura dos CSVs.
-
-### `scripts/bronze/sp_load_bronze.sql`
+### scripts/bronze/`sp_load_bronze.sql`
 Cria a procedure `bronze.load_bronze()`.
 1. Para cada tabela: `TRUNCATE` e depois `COPY` do CSV correspondente.
 2. Exibe o tempo de carga por tabela e o total.
 3. Em caso de erro, informa tabela, SQLSTATE e mensagem.
 
-### `scripts/silver/ddl_silver.sql`
+### scripts/silver/`ddl_silver.sql`
 Cria as 6 tabelas da Silver, com tipos adequados e coluna técnica de data de carga.
 
-### `scripts/silver/sp_load_silver.sql`
+### scripts/silver/`sp_load_silver.sql`
 Cria a procedure `silver.load_silver()`, que lê da Bronze, trata e grava na Silver (`TRUNCATE` + `INSERT`).
 
 | Tabela | Tratamentos principais |
@@ -116,16 +124,16 @@ Cria a procedure `silver.load_silver()`, que lê da Bronze, trata e grava na Sil
 | `erp_loc_a101` | Normaliza ID; padroniza nomes de países |
 | `erp_px_cat_g1v2` | Corrige identificadores de categoria |
 
-### `scripts/gold/ddl_gold.sql`
+### scripts/gold/`ddl_gold.sql`
 Cria as views do Star Schema.
 1. `dim_customers`: junta CRM + ERP (nascimento, gênero, país) e gera `customer_key`.
 2. `dim_products`: junta produtos + categorias, mantém só os ativos (sem data de fim) e gera `product_key`.
 3. `fact_sales`: liga as vendas às dimensões pelas chaves substitutas.
 
-### `tests/silver_quality_checks.sql`
+### tests/`silver_quality_checks.sql`
 Consultas de diagnóstico sobre a Bronze: duplicados, nulos, espaços, valores fora do padrão, datas inválidas, regras de vendas e consistência CRM × ERP. Define o que a Silver precisa tratar. Somente leitura.
 
-### `tests/gold_quality_checks.sql`
+### tests/`gold_quality_checks.sql`
 Consultas de validação da Gold: integração das dimensões, duplicidades e integridade referencial entre fato e dimensões. Somente leitura.
 
 ## 7. Como rodar o projeto
@@ -144,7 +152,7 @@ Consultas de validação da Gold: integração das dimensões, duplicidades e in
    ```
 
 2. **Ajustar os caminhos dos CSVs** em `scripts/bronze/sp_load_bronze.sql`.
-   Os caminhos atuais são de uma máquina local (`C:/Users/2992529/...`). Troque pelo caminho absoluto da pasta `datasets/` no seu ambiente (6 ocorrências de `FROM '...'`).
+   Os caminhos atuais são de uma máquina local (`C:/Users/<user_name>/...`). Troque pelo caminho absoluto da pasta `datasets/` no seu ambiente.
 
 3. **Criar o banco e os schemas** — execute `scripts/init_database.sql`.
    Depois, **conecte-se ao banco `data_warehouse`** (o script não faz essa troca automaticamente) antes de executar os próximos.
@@ -153,11 +161,11 @@ Consultas de validação da Gold: integração das dimensões, duplicidades e in
 
    | # | Script |
    |---|---|
-   | 1 | `scripts/bronze/ddl_bronze.sql` |
-   | 2 | `scripts/bronze/sp_load_bronze.sql` |
-   | 3 | `scripts/silver/ddl_silver.sql` |
-   | 4 | `scripts/silver/sp_load_silver.sql` |
-   | 5 | `scripts/gold/ddl_gold.sql` |
+   | 1 | scripts/bronze/`ddl_bronze.sql` |
+   | 2 | scripts/bronze/`sp_load_bronze.sql` |
+   | 3 | scripts/silver/`ddl_silver.sql` |
+   | 4 | scripts/silver/`sp_load_silver.sql` |
+   | 5 | scripts/gold/`ddl_gold.sql` |
 
 5. **Carregar os dados**
    ```sql
@@ -166,7 +174,7 @@ Consultas de validação da Gold: integração das dimensões, duplicidades e in
    ```
 
 6. **Validar e consultar**
-   - Execute `tests/silver_quality_checks.sql` e `tests/gold_quality_checks.sql`.
+   - Execute tests/`silver_quality_checks.sql` e tests/`gold_quality_checks.sql`.
    - Consulte a Gold:
      ```sql
      SELECT * FROM gold.fact_sales LIMIT 10;
